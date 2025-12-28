@@ -18,6 +18,10 @@ services:
     environment:
       # MongoDB URI from .env file
       - MONGO_URI=${MONGO_URI:-}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     restart: unless-stopped
     networks:
       - zenner-network
@@ -28,7 +32,7 @@ services:
       dockerfile: services/api-service/Dockerfile
     container_name: api-service
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5000}:5000"
     volumes:
       # Mount config file
       - ./config.ini:/app/config.ini:ro
@@ -39,9 +43,34 @@ services:
     environment:
       # MongoDB URI from .env file
       - MONGO_URI=${MONGO_URI:-}
+      # Flask configuration
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     restart: unless-stopped
     depends_on:
       - ingest-analytics-engine
+    networks:
+      - zenner-network
+
+  ui-service:
+    build:
+      context: .
+      dockerfile: services/ui-service/Dockerfile
+      args:
+        # Pass API base URL as build argument for React app
+        # Use localhost since browser can't resolve Docker service names
+        - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL:-http://localhost:5000/api}
+    container_name: ui-service
+    ports:
+      - "${UI_PORT:-3000}:80"
+    restart: unless-stopped
+    depends_on:
+      - api-service
     networks:
       - zenner-network
 

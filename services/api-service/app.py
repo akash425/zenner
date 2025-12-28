@@ -4,6 +4,7 @@ Simple Flask API to serve analytics results from MongoDB.
 import sys
 from pathlib import Path
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -25,6 +26,7 @@ from mongo.mongo_client import get_manager
 from config.config import Config
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Initialize configuration
 try:
@@ -42,7 +44,7 @@ def get_analytics_collection():
     return manager.get_collection(collection_name, db_name)
 
 
-@app.route('/analytics/top-devices', methods=['GET'])
+@app.route('/api/analytics/top-devices', methods=['GET'])
 def get_top_devices():
     """Get top active devices."""
     try:
@@ -67,7 +69,7 @@ def get_top_devices():
         }), 500
 
 
-@app.route('/analytics/weak-devices', methods=['GET'])
+@app.route('/api/analytics/weak-devices', methods=['GET'])
 def get_weak_devices():
     """Get weak signal devices."""
     try:
@@ -92,7 +94,7 @@ def get_weak_devices():
         }), 500
 
 
-@app.route('/analytics/gateway-stats', methods=['GET'])
+@app.route('/api/analytics/gateway-stats', methods=['GET'])
 def get_gateway_stats():
     """Get gateway environment statistics."""
     try:
@@ -117,7 +119,7 @@ def get_gateway_stats():
         }), 500
 
 
-@app.route('/analytics/duplicates', methods=['GET'])
+@app.route('/api/analytics/duplicates', methods=['GET'])
 def get_duplicates():
     """Get devices with duplicate records."""
     try:
@@ -142,7 +144,7 @@ def get_duplicates():
         }), 500
 
 
-@app.route('/analytics/high-temperature', methods=['GET'])
+@app.route('/api/analytics/high-temperature', methods=['GET'])
 def get_high_temperature():
     """Get high temperature records."""
     try:

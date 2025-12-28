@@ -24,7 +24,7 @@ COPY config.ini /app/
 COPY requirements.txt /app/
 
 # Install Python dependencies including Flask
-RUN pip install --no-cache-dir -r requirements.txt flask==2.3.3
+RUN pip install --no-cache-dir -r requirements.txt flask==2.3.3 flask-cors==4.0.0
 
 # Set Python path
 ENV PYTHONPATH=/app:/app/shared
