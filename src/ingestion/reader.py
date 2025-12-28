@@ -1,38 +1,18 @@
-import configparser
 import csv
-import logging
-import sys
 from pathlib import Path
+from typing import Optional
+from src.utils.logger import get_logger
+from src.utils.config import Config
 
 
-CONFIG_FILE_PATH = './config.ini'
-
-
-def setup_logger(log_file_path):
-    Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
+def read_csv_file(file_path: str, start_line: Optional[int] = None):
+    """
+    Read CSV file and return rows as dictionaries.
     
-    logger = logging.getLogger('ingestion.reader')
-    logger.setLevel(logging.INFO)
-    
-    if logger.handlers:
-        return logger
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    return logger
-
-
-def read_csv_file(file_path, log_file_path='./logs/ingestion.log'):
-    logger = setup_logger(log_file_path)
+    Can start from a specific line number to skip already processed rows.
+    """
+    config = Config()
+    logger = get_logger('ingestion.reader', log_file_path=config.get_log_file_path())
     
     csv_path = Path(file_path)
     if not csv_path.exists():
@@ -40,9 +20,19 @@ def read_csv_file(file_path, log_file_path='./logs/ingestion.log'):
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
     
-    logger.info(f"Reading CSV file: {file_path}")
+    # Adjust start line - line 0 is header, line 1 is first data row
+    if start_line is None:
+        start_line = 1
+    elif start_line < 0:
+        raise ValueError(f"start_line must be non-negative, got {start_line}")
+    elif start_line == 0:
+        logger.warning("start_line=0 means header row, adjusting to line 1")
+        start_line = 1
+    
+    logger.info(f"Reading CSV file: {file_path} (starting from line {start_line})")
     
     row_count = 0
+    skipped_count = 0
     
     try:
         # Try UTF-8 first
@@ -56,12 +46,20 @@ def read_csv_file(file_path, log_file_path='./logs/ingestion.log'):
                 
                 logger.info(f"CSV headers: {reader.fieldnames}")
                 
+                # Skip lines until we reach start_line
+                current_line = 1
                 for row in reader:
+                    if current_line < start_line:
+                        skipped_count += 1
+                        current_line += 1
+                        continue
+                    
                     row_count += 1
+                    current_line += 1
                     yield dict(row)
         
         except UnicodeDecodeError:
-            # Try with error handling
+            # Try with error handling for encoding issues
             logger.warning("UTF-8 decoding error, trying with error handling")
             with open(csv_path, 'r', encoding='utf-8', errors='replace', newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
@@ -72,33 +70,30 @@ def read_csv_file(file_path, log_file_path='./logs/ingestion.log'):
                 
                 logger.info(f"CSV headers: {reader.fieldnames}")
                 
+                current_line = 1
                 for row in reader:
+                    if current_line < start_line:
+                        skipped_count += 1
+                        current_line += 1
+                        continue
+                    
                     row_count += 1
+                    current_line += 1
                     yield dict(row)
     
     except Exception as e:
-        logger.error(f"Error reading CSV: {type(e).__name__}: {str(e)}")
+        logger.error(f"Error reading CSV: {str(e)}")
         raise
     
     finally:
-        logger.info(f"Finished reading CSV. Total rows: {row_count}")
+        if skipped_count > 0:
+            logger.info(f"Finished reading CSV. Skipped {skipped_count} rows, read {row_count} new rows")
+        else:
+            logger.info(f"Finished reading CSV. Total rows: {row_count}")
 
 
-def read_lorawan_uplink_devices():
-    config = configparser.RawConfigParser()
-    config_path = Path(CONFIG_FILE_PATH)
-    
-    if not config_path.exists():
-        print(f"ERROR: Configuration file not found: {CONFIG_FILE_PATH}")
-        sys.exit(1)
-    
-    config.read(config_path)
-    
-    csv_path = config.get('ingestion', 'csv_file_path', fallback='').strip()
-    if not csv_path:
-        print("ERROR: CSV file path not configured in config.ini")
-        sys.exit(1)
-    
-    log_path = config.get('ingestion', 'log_file_path', fallback='./logs/ingestion.log').strip() or './logs/ingestion.log'
-    
-    return read_csv_file(csv_path, log_path)
+def read_lorawan_uplink_devices(start_line: Optional[int] = None):
+    """Read LoRaWAN uplink devices from the configured CSV file."""
+    config = Config()
+    csv_path = config.get_csv_file_path()
+    return read_csv_file(csv_path, start_line=start_line)

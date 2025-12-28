@@ -1,8 +1,9 @@
 # MongoDB driver for connecting to MongoDB Atlas
 pymongo==4.6.1
+dnspython==2.4.2
 
 # Environment variable management
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # CSV handling and data manipulation (if needed)
 # Note: Using 2.0.3 for Python 3.8 compatibility (2.1.x requires Python 3.9+)
@@ -14,3 +15,5 @@ certifi==2024.2.2
 # Timezone-aware datetime handling
 pytz==2024.1
 
+# Job scheduling
+APScheduler==3.10.4

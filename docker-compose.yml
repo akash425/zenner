@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  lorawan-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lorawan-pipeline
+    volumes:
+      # Mount config file
+      - ./config.ini:/app/config.ini:ro
+      # Mount data directory for CSV files
+      - ./data:/app/data:ro
+      # Mount logs directory to persist logs
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      # MongoDB URI from .env file
+      - MONGO_URI=${MONGO_URI:-}
+    restart: unless-stopped
+

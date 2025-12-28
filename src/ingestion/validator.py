@@ -1,48 +1,26 @@
-import logging
-from pathlib import Path
+from src.utils.logger import get_logger
+from src.utils.config import Config
 
-
+# Fields that must be present and not empty
 REQUIRED_FIELDS = ['device_id', 'gateway_id', 'timestamp', 'rssi', 'snr']
 
 
-def setup_logger(log_file_path):
-    Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    logger = logging.getLogger('ingestion.validator')
-    logger.setLevel(logging.INFO)
-    
-    if logger.handlers:
-        return logger
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    return logger
-
-
-def validate_row(row, log_file_path='./logs/ingestion.log'):
-    logger = setup_logger(log_file_path)
+def validate_row(row):
+    """Check if a row has all required fields and clean it up."""
+    config = Config()
+    logger = get_logger('ingestion.validator', log_file_path=config.get_log_file_path())
     
     device_id = row.get('device_id', 'unknown')
     timestamp = row.get('timestamp', 'unknown')
     row_id = f"device_id={device_id}, timestamp={timestamp}"
     
-    # Check for missing required fields
+    # Check if all required fields are present
     missing_fields = [field for field in REQUIRED_FIELDS if field not in row]
     if missing_fields:
-        error_msg = f"Validation failed for row [{row_id}]: Missing required fields: {', '.join(missing_fields)}"
-        logger.warning(error_msg)
-        return (False, error_msg)
+        logger.warning(f"Missing required fields for {row_id}: {', '.join(missing_fields)}")
+        return (False, f"Missing fields: {', '.join(missing_fields)}")
     
-    # Check for empty values in required fields
+    # Check if required fields have values
     empty_fields = []
     for field in REQUIRED_FIELDS:
         value = row.get(field)
@@ -50,11 +28,10 @@ def validate_row(row, log_file_path='./logs/ingestion.log'):
             empty_fields.append(field)
     
     if empty_fields:
-        error_msg = f"Validation failed for row [{row_id}]: Empty values in required fields: {', '.join(empty_fields)}"
-        logger.warning(error_msg)
-        return (False, error_msg)
+        logger.warning(f"Empty required fields for {row_id}: {', '.join(empty_fields)}")
+        return (False, f"Empty fields: {', '.join(empty_fields)}")
     
-    # Clean row - strip strings
+    # Clean up the row - strip whitespace from strings
     cleaned = {}
     for key, value in row.items():
         if isinstance(value, str):
