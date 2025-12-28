@@ -1,23 +1,14 @@
-import configparser
-import logging
-import os
-import sys
 import time
-from pathlib import Path
+from typing import Iterator, Tuple
 
-try:
-    from pymongo import MongoClient, InsertOne
-    from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout, BulkWriteError
-    PYMONGO_AVAILABLE = True
-except ImportError:
-    PYMONGO_AVAILABLE = False
+from pymongo import InsertOne
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout, BulkWriteError
 
+from src.utils.config import Config
+from src.utils.logger import get_logger
+from src.utils.mongo_client import get_manager
 
-CONFIG_FILE_PATH = './config.ini'
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-
-# Indexes to create
+# Database indexes for faster queries
 INDEXES = [
     {'keys': [('device_id', 1)], 'name': 'device_id_1'},
     {'keys': [('gateway_id', 1)], 'name': 'gateway_id_1'},
@@ -25,51 +16,12 @@ INDEXES = [
     {'keys': [('device_id', 1), ('timestamp', 1)], 'name': 'device_id_1_timestamp_1'},
 ]
 
-
-def setup_logger(log_file_path):
-    Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    logger = logging.getLogger('ingestion.loader')
-    logger.setLevel(logging.INFO)
-    
-    if logger.handlers:
-        return logger
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    return logger
-
-
-def get_mongo_client(mongo_uri, logger):
-    if not PYMONGO_AVAILABLE:
-        logger.error("pymongo is not installed")
-        return None
-    
-    try:
-        client = MongoClient(
-            mongo_uri,
-            serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=10000,
-            socketTimeoutMS=30000,
-        )
-        client.admin.command('ping')
-        logger.info("Connected to MongoDB")
-        return client
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {str(e)}")
-        return None
+MAX_RETRIES = 3
+RETRY_DELAY = 2
 
 
 def ensure_indexes(collection, logger):
+    """Create database indexes if they don't exist."""
     try:
         existing_indexes = {idx['name'] for idx in collection.list_indexes()}
         
@@ -79,12 +31,13 @@ def ensure_indexes(collection, logger):
                     collection.create_index(index_def['keys'], name=index_def['name'], background=True)
                     logger.info(f"Created index: {index_def['name']}")
                 except Exception as e:
-                    logger.warning(f"Failed to create index {index_def['name']}: {str(e)}")
+                    logger.warning(f"Could not create index {index_def['name']}: {str(e)}")
     except Exception as e:
-        logger.error(f"Error ensuring indexes: {str(e)}")
+        logger.error(f"Error checking indexes: {str(e)}")
 
 
 def bulk_insert(collection, documents, logger):
+    """Insert documents in bulk with retry logic."""
     if not documents:
         return (0, 0)
     
@@ -97,109 +50,73 @@ def bulk_insert(collection, documents, logger):
             skipped = len(documents) - inserted
             
             if attempt > 0:
-                logger.info(f"Bulk insert succeeded on attempt {attempt + 1}. Inserted: {inserted}, Skipped: {skipped}")
+                logger.info(f"Insert succeeded on attempt {attempt + 1}. Inserted: {inserted}, Skipped: {skipped}")
             
             return (inserted, skipped)
         
         except BulkWriteError as e:
+            # Some documents failed, but some may have succeeded
             inserted = e.details.get('nInserted', 0)
             write_errors = e.details.get('writeErrors', [])
             skipped = len(write_errors)
             
-            # Filter out successfully inserted documents
+            # Remove successfully inserted documents from retry list
             error_indices = {err['index'] for err in write_errors}
             operations = [op for i, op in enumerate(operations) if i not in error_indices]
             
             if not operations:
-                logger.warning(f"Bulk insert completed with errors. Inserted: {inserted}, Skipped: {skipped}")
+                # All remaining documents were inserted
+                logger.warning(f"Insert completed with some errors. Inserted: {inserted}, Skipped: {skipped}")
                 return (inserted, skipped)
             
             if attempt < MAX_RETRIES:
-                logger.warning(f"Bulk insert partial failure (attempt {attempt + 1}). Inserted: {inserted}, Errors: {skipped}. Retrying...")
+                logger.warning(f"Partial failure (attempt {attempt + 1}). Inserted: {inserted}, Errors: {skipped}. Retrying...")
                 time.sleep(RETRY_DELAY)
                 continue
             else:
-                logger.error(f"Bulk insert failed after {MAX_RETRIES + 1} attempts. Inserted: {inserted}, Skipped: {skipped}")
+                logger.error(f"Insert failed after {MAX_RETRIES + 1} attempts. Inserted: {inserted}, Skipped: {skipped}")
                 return (inserted, skipped)
         
         except (ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout) as e:
+            # Network error - retry
             if attempt < MAX_RETRIES:
-                logger.warning(f"Transient error during bulk insert (attempt {attempt + 1}): {str(e)}. Retrying...")
+                logger.warning(f"Network error (attempt {attempt + 1}): {str(e)}. Retrying...")
                 time.sleep(RETRY_DELAY)
                 continue
             else:
-                logger.error(f"Bulk insert failed: {str(e)}")
+                logger.error(f"Insert failed after retries: {str(e)}")
                 return (0, len(documents))
         
         except Exception as e:
-            logger.error(f"Bulk insert failed: {str(e)}")
+            logger.error(f"Insert failed: {str(e)}")
             return (0, len(documents))
     
     return (0, len(documents))
 
 
-def load_rows(rows, mongo_uri=None, log_file_path='./logs/ingestion.log'):
-    logger = setup_logger(log_file_path)
+def load_rows(rows: Iterator[dict]) -> Tuple[int, int]:
+    """Save rows to MongoDB in batches."""
+    config = Config()
+    logger = get_logger('ingestion.loader', log_file_path=config.get_log_file_path())
     
-    # Load config once
-    config = configparser.RawConfigParser()
-    config_path = Path(CONFIG_FILE_PATH)
-    
-    if not config_path.exists():
-        print(f"ERROR: Configuration file not found: {CONFIG_FILE_PATH}")
-        sys.exit(1)
-    
-    config.read(config_path)
-    
-    # Get MongoDB URI
-    if mongo_uri is None:
-        mongo_uri = config.get('mongodb', 'uri', fallback='').strip()
-        
-        if not mongo_uri:
-            mongo_uri = os.getenv('MONGO_URI', '').strip()
-        
-        if not mongo_uri:
-            error_msg = "MongoDB URI not provided. Set it in config.ini [mongodb] uri or MONGO_URI environment variable"
-            logger.error(error_msg)
-            print(f"ERROR: {error_msg}")
-            sys.exit(1)
-    
-    # Get database and collection settings
-    db_name = config.get('database', 'name', fallback='').strip()
-    if not db_name:
-        error_msg = "Database name not configured in config.ini"
-        logger.error(error_msg)
-        print(f"ERROR: {error_msg}")
-        sys.exit(1)
-    
-    collection_name = config.get('database', 'collection', fallback='').strip()
-    if not collection_name:
-        error_msg = "Collection name not configured in config.ini"
-        logger.error(error_msg)
-        print(f"ERROR: {error_msg}")
-        sys.exit(1)
+    db_name = config.get_database_name()
+    collection_name = config.get_collection_name()
+    batch_size = config.get_batch_size()
     
     try:
-        batch_size = config.getint('ingestion', 'batch_size', fallback=1000)
-    except (ValueError, configparser.NoOptionError):
-        batch_size = 1000
-    
-    # Connect to MongoDB
-    client = get_mongo_client(mongo_uri, logger)
-    if client is None:
-        logger.error("Cannot proceed without MongoDB connection")
+        manager = get_manager()
+        collection = manager.get_collection(collection_name, db_name)
+    except Exception as e:
+        logger.error(f"Cannot connect to MongoDB: {str(e)}")
         return (0, 0)
     
     try:
-        db = client[db_name]
-        collection = db[collection_name]
+        logger.info(f"Loading rows into {db_name}.{collection_name}")
         
-        logger.info(f"Loading rows into MongoDB. Database: {db_name}, Collection: {collection_name}")
-        
-        # Ensure indexes
+        # Create indexes for faster queries
         ensure_indexes(collection, logger)
         
-        # Batch and insert rows
+        # Process rows in batches
         batch = []
         total_inserted = 0
         total_skipped = 0
@@ -209,24 +126,23 @@ def load_rows(rows, mongo_uri=None, log_file_path='./logs/ingestion.log'):
             batch.append(row)
             total_processed += 1
             
+            # Insert when batch is full
             if len(batch) >= batch_size:
                 inserted, skipped = bulk_insert(collection, batch, logger)
                 total_inserted += inserted
                 total_skipped += skipped
                 batch = []
         
-        # Insert remaining rows
+        # Insert any remaining rows
         if batch:
             inserted, skipped = bulk_insert(collection, batch, logger)
             total_inserted += inserted
             total_skipped += skipped
         
-        logger.info(f"Finished loading rows. Total processed: {total_processed}, Inserted: {total_inserted}, Skipped: {total_skipped}")
+        logger.info(f"Finished loading. Processed: {total_processed}, Inserted: {total_inserted}, Skipped: {total_skipped}")
         
         return (total_inserted, total_skipped)
     
     except Exception as e:
-        logger.error(f"Error during load operation: {str(e)}")
+        logger.error(f"Error loading rows: {str(e)}")
         raise
-    finally:
-        client.close()

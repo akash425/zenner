@@ -1,5 +1,5 @@
 # Configuration files with sensitive data
-config.ini
+.env
 
 # Python
 __pycache__/
@@ -32,6 +32,10 @@ ENV/
 # Logs
 logs/
 *.log
+
+# Runtime/generated data files
+data/checkpoint.json
+data/high_temperature_records.json
 
 # IDE
 .vscode/
