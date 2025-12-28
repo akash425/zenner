@@ -45,6 +45,19 @@ services:
     networks:
       - zenner-network
 
+  ui-service:
+    build:
+      context: .
+      dockerfile: services/ui-service/Dockerfile
+    container_name: ui-service
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    depends_on:
+      - api-service
+    networks:
+      - zenner-network
+
 networks:
   zenner-network:
     driver: bridge
