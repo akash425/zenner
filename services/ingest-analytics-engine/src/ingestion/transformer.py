@@ -1,6 +1,15 @@
+import sys
 from datetime import datetime
-from src.utils.logger import get_logger
-from src.utils.config import Config
+from pathlib import Path
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from config.config import Config
 
 # Fields that should be converted to float
 FLOAT_FIELDS = [

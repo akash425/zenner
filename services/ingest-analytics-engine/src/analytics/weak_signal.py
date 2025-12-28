@@ -1,7 +1,16 @@
+import sys
+from pathlib import Path
 from datetime import datetime
-from src.utils.logger import get_logger
-from src.utils.mongo_client import get_manager
-from src.utils.config import Config
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from mongo.mongo_client import get_manager
+from config.config import Config
 
 
 def get_weak_devices(limit=20, save_to_db=True):

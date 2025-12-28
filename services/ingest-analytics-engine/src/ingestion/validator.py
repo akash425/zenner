@@ -1,5 +1,14 @@
-from src.utils.logger import get_logger
-from src.utils.config import Config
+import sys
+from pathlib import Path
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from config.config import Config
 
 # Fields that must be present and not empty
 REQUIRED_FIELDS = ['device_id', 'gateway_id', 'timestamp', 'rssi', 'snr']

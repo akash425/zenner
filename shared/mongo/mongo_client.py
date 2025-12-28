@@ -46,8 +46,16 @@ class MongoClientManager:
     
     def _initialize_client(self) -> None:
         """Create the MongoDB connection."""
-        from src.utils.config import Config
+        import sys
+        from pathlib import Path
         
+        # Import Config from shared
+        project_root = Path(__file__).parent.parent.parent
+        shared_path = project_root / 'shared'
+        if str(shared_path) not in sys.path:
+            sys.path.insert(0, str(shared_path))
+        
+        from config.config import Config
         config = Config()
         self._mongo_uri = config.get_mongo_uri()
         
@@ -85,9 +93,17 @@ class MongoClientManager:
     
     def get_database(self, db_name: Optional[str] = None) -> Database:
         """Get a database instance."""
-        from src.utils.config import Config
+        import sys
+        from pathlib import Path
         
         if db_name is None:
+            # Import Config from shared
+            project_root = Path(__file__).parent.parent.parent
+            shared_path = project_root / 'shared'
+            if str(shared_path) not in sys.path:
+                sys.path.insert(0, str(shared_path))
+            
+            from config.config import Config
             config = Config()
             db_name = config.get_database_name()
         
@@ -100,9 +116,17 @@ class MongoClientManager:
         db_name: Optional[str] = None
     ) -> Collection:
         """Get a collection instance."""
-        from src.utils.config import Config
+        import sys
+        from pathlib import Path
         
         if collection_name is None or db_name is None:
+            # Import Config from shared
+            project_root = Path(__file__).parent.parent.parent
+            shared_path = project_root / 'shared'
+            if str(shared_path) not in sys.path:
+                sys.path.insert(0, str(shared_path))
+            
+            from config.config import Config
             config = Config()
             if collection_name is None:
                 collection_name = config.get_collection_name()

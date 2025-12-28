@@ -1,7 +1,17 @@
 import sys
+from pathlib import Path
 
-from src.utils.config import Config
-from src.utils.logger import setup_ingestion_logger, setup_analytics_logger
+# Add services/ingest-analytics-engine to Python path for imports
+services_path = Path(__file__).parent / 'services' / 'ingest-analytics-engine'
+sys.path.insert(0, str(services_path))
+
+# Add shared to path
+shared_path = Path(__file__).parent / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from config.config import Config
+from logger.logger import setup_ingestion_logger, setup_analytics_logger
 from src.utils.checkpoint import read_checkpoint, write_checkpoint
 from src.ingestion.reader import read_lorawan_uplink_devices
 from src.ingestion.validator import validate_row
