@@ -3,11 +3,19 @@ Checkpoint management.
 
 Tracks which CSV rows have been processed to avoid reprocessing data.
 """
+import sys
 import json
 from datetime import datetime
 from pathlib import Path
-from src.utils.logger import get_logger
-from src.utils.config import Config
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from config.config import Config
 
 
 def get_checkpoint_file_path() -> Path:

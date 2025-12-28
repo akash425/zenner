@@ -8,8 +8,15 @@ import time
 from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from src.utils.logger import get_logger
-from src.utils.config import Config
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from config.config import Config
 
 log_path = Path("./logs/scheduler.log")
 logger = get_logger("scheduler", str(log_path))

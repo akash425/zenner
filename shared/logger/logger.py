@@ -3,6 +3,7 @@ Logging setup.
 
 Creates and configures loggers for the application.
 """
+import sys
 import logging
 from pathlib import Path
 from typing import Optional, Dict
@@ -61,7 +62,13 @@ def get_logger(
 def setup_ingestion_logger(log_file_path: Optional[str] = None) -> logging.Logger:
     """Get logger for ingestion module."""
     if log_file_path is None:
-        from src.utils.config import Config
+        # Import Config from shared
+        project_root = Path(__file__).parent.parent.parent
+        shared_path = project_root / 'shared'
+        if str(shared_path) not in sys.path:
+            sys.path.insert(0, str(shared_path))
+        
+        from config.config import Config
         config = Config()
         log_file_path = config.get_log_file_path()
     
@@ -71,7 +78,13 @@ def setup_ingestion_logger(log_file_path: Optional[str] = None) -> logging.Logge
 def setup_analytics_logger(log_file_path: Optional[str] = None) -> logging.Logger:
     """Get logger for analytics module."""
     if log_file_path is None:
-        from src.utils.config import Config
+        # Import Config from shared
+        project_root = Path(__file__).parent.parent.parent
+        shared_path = project_root / 'shared'
+        if str(shared_path) not in sys.path:
+            sys.path.insert(0, str(shared_path))
+        
+        from config.config import Config
         config = Config()
         log_file_path = config.get_analytics_log_path()
     

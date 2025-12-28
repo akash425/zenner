@@ -1,17 +1,26 @@
+import sys
+from pathlib import Path
 from datetime import datetime
-from src.utils.logger import get_logger
-from src.utils.mongo_client import get_manager
-from src.utils.config import Config
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from logger.logger import get_logger
+from mongo.mongo_client import get_manager
+from config.config import Config
 
 
-def get_duplicate_devices(save_to_db=True):
+def get_top_active_devices(limit=10, save_to_db=True):
     """
-    Find devices that have duplicate records (more than one record).
+    Get the most active devices by counting how many uplinks each device has.
     
-    Returns a list of devices with their record counts.
+    Returns the top devices sorted by uplink count.
     """
     config = Config()
-    logger = get_logger('analytics.duplicates', log_file_path=config.get_analytics_log_path())
+    logger = get_logger('analytics.device_stats', log_file_path=config.get_analytics_log_path())
     
     try:
         # Get database collections
@@ -19,26 +28,28 @@ def get_duplicate_devices(save_to_db=True):
         collection = manager.get_collection(config.get_collection_name())
         analytics_collection = manager.get_collection(config.get_analytics_collection_name())
         
-        # Find devices with more than one record
+        # Count uplinks per device and get top ones
         pipeline = [
             {'$group': {'_id': '$device_id', 'count': {'$sum': 1}}},
-            {'$match': {'count': {'$gt': 1}}},
+            {'$sort': {'count': -1}},
+            {'$limit': limit},
             {'$project': {'_id': 0, 'device_id': '$_id', 'count': 1}}
         ]
         
         results = list(collection.aggregate(pipeline))
-        logger.info(f"Found {len(results)} devices with duplicate records")
+        logger.info(f"Found top {len(results)} active devices")
         
-        # Save results to analytics collection
+        # Save results
         if save_to_db:
             try:
                 analytics_doc = {
-                    'analytics_type': 'duplicate_devices',
+                    'analytics_type': 'top_active_devices',
                     'computed_at': datetime.utcnow(),
+                    'parameters': {'limit': limit},
                     'results': results
                 }
                 analytics_collection.update_one(
-                    {'analytics_type': 'duplicate_devices'},
+                    {'analytics_type': 'top_active_devices'},
                     {'$set': analytics_doc},
                     upsert=True
                 )
@@ -48,6 +59,6 @@ def get_duplicate_devices(save_to_db=True):
         return results
     
     except Exception as e:
-        logger.error(f"Error finding duplicate devices: {str(e)}")
+        logger.error(f"Error getting top active devices: {str(e)}")
         return []
 

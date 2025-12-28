@@ -4,9 +4,18 @@ from typing import Iterator, Tuple
 from pymongo import InsertOne
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout, BulkWriteError
 
-from src.utils.config import Config
-from src.utils.logger import get_logger
-from src.utils.mongo_client import get_manager
+import sys
+from pathlib import Path
+
+# Add shared to path
+project_root = Path(__file__).parent.parent.parent.parent.parent
+shared_path = project_root / 'shared'
+if str(shared_path) not in sys.path:
+    sys.path.insert(0, str(shared_path))
+
+from config.config import Config
+from logger.logger import get_logger
+from mongo.mongo_client import get_manager
 
 # Database indexes for faster queries
 INDEXES = [

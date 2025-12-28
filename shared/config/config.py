@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_CONFIG_PATH = Path('./config.ini')
+# Default config path is in project root
+DEFAULT_CONFIG_PATH = Path(__file__).parent.parent.parent / 'config.ini'
 
 
 class Config:

@@ -1,16 +1,16 @@
 version: '3.8'
 
 services:
-  lorawan-pipeline:
+  ingest-analytics-engine:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: lorawan-pipeline
+      dockerfile: services/ingest-analytics-engine/Dockerfile
+    container_name: ingest-analytics-engine
     volumes:
       # Mount config file
       - ./config.ini:/app/config.ini:ro
-      # Mount data directory for CSV files
-      - ./data:/app/data:ro
+      # Mount data directory for CSV files and checkpoint
+      - ./data:/app/data
       # Mount logs directory to persist logs
       - ./logs:/app/logs
     env_file:
@@ -19,4 +19,32 @@ services:
       # MongoDB URI from .env file
       - MONGO_URI=${MONGO_URI:-}
     restart: unless-stopped
+    networks:
+      - zenner-network
 
+  api-service:
+    build:
+      context: .
+      dockerfile: services/api-service/Dockerfile
+    container_name: api-service
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount config file
+      - ./config.ini:/app/config.ini:ro
+      # Mount logs directory to persist logs
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      # MongoDB URI from .env file
+      - MONGO_URI=${MONGO_URI:-}
+    restart: unless-stopped
+    depends_on:
+      - ingest-analytics-engine
+    networks:
+      - zenner-network
+
+networks:
+  zenner-network:
+    driver: bridge
